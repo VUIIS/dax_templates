@@ -47,7 +47,7 @@ mkdir -p $OUTDIR
 echo "Checking that we can download"
 while true;do
     SESSID=`curl -s -n "$XNATHOST/data/JSESSION"`
-    echo "JSESSIONID=$SESSID"
+    #echo "JSESSIONID=$SESSID"
     SESSCOUNT=`curl -s -b "JSESSIONID=$SESSID" "$XNATHOST/data/user/$XNATUSER/sessions" | cut -s -f2 -d ":" | cut -f1 -d "}"`
     echo "$SESSCOUNT"
     if (( "$SESSCOUNT" > "$SESSLIMIT" )); then
@@ -59,7 +59,8 @@ while true;do
         break
     fi
 done
-echo "DONE! JSESSIONID=$SESSID"
+#echo "DONE! JSESSIONID=$SESSID"
+echo "DONE!"
 
 # Collect inputs
 for IN in "${INLIST[@]}"; do
@@ -78,7 +79,8 @@ for IN in "${INLIST[@]}"; do
     fi
 
     # Show the whole command
-    echo $CMD
+	SAFE_CMD=$(echo ${CMD} | sed "s/$SESSID/SESSID/g")
+    echo $SAFE_CMD
 
     # Run the full command
     eval result=\$\($CMD\)
