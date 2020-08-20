@@ -116,6 +116,16 @@ for IN in "${INLIST[@]}"; do
       BIDS_DIR=$INDIR/BIDS_DATA
       echo $BIDS_DIR
       python -c 'import os; from dax import XnatToBids, XnatUtils; XNAT = XnatUtils.get_interface(); XnatToBids.bids_yaml(XNAT, "'$PROJECT'","'$SCAN_ID'","'$SUBJ'", "'$INDIR'","'$SCAN_FILE'", "'$col3'", "'$SESSION'", "'$col1'", "001", "001"); XnatToBids.dataset_description_file("'$BIDS_DIR'",XNAT,"'$PROJECT'")'
+    # Use existing FS6_v1 in fmriprep output
+    # col2 will be DIR when it contains FS6_v1 assessor output
+    elif [ $col2 == "DIR" ]; then
+      echo "pre-use freesurfer from XNAT"
+      echo $OUTDIR/freesurfer/sub-01
+      mkdir -p $OUTDIR/freesurfer/sub-01
+      echo $INDIR/$col1
+      echo "movin fs folders"
+      mv $INDIR/$col1/DATA/* $OUTDIR/freesurfer/sub-01/
+      ls $OUTDIR/freesurfer/sub-01/
     fi
 done
 
