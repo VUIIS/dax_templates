@@ -165,10 +165,11 @@ for OUT in "${OUTLIST[@]}"; do
     else errors=1 && echo "ERROR:invalid type:$col2"; fi
 done
 
-# from the original job_template.txt removed the most have haspdf condition,
-# here the haspdf will be 0
-# because the pdf are created from the job template and not the singularity
-if [ $errors -gt 0 ]; then echo "JOB_FAILED" && touch $DSTDIR/JOB_FAILED.txt;
+# Check if the PDF file has been created and is non empty
+[ -f $PDFFILE ] && haspdf=1 || echo "PDF does not exist"
+[ -s $PDFFILE ] && echo "PDF not empty" || echo "PDF empty" && errors=1
+
+if [ $errors -gt 0 ] || [ $haspdf != 1 ]; then echo "JOB_FAILED" && touch $DSTDIR/JOB_FAILED.txt;
 else echo "COMPLETE" && touch $DSTDIR/READY_TO_UPLOAD.txt; fi
 
 rm -rf $INDIR $OUTDIR
