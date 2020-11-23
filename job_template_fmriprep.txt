@@ -34,7 +34,6 @@ SLEEPMAX=300
 echo $DSTDIR
 echo $INDIR
 echo $OUTDIR
-echo $WORKDIR
 echo $CONTAINERPATH
 echo $XNATHOST
 echo $XNATUSER
@@ -43,7 +42,7 @@ echo $SLEEPMAX
 
 mkdir -p $INDIR
 mkdir -p $OUTDIR
-mkdir -p $WORKDIR
+mkdir -p $JOBDIR/WORK
 # Check number of open sessions on host before we download
 echo "Checking that we can download"
 while true;do
@@ -115,7 +114,7 @@ for IN in "${INLIST[@]}"; do
       echo $SESSION
       BIDS_DIR=$INDIR/BIDS_DATA
       echo $BIDS_DIR
-      python -c 'import os; from dax import XnatToBids, XnatUtils; XNAT = XnatUtils.get_interface(); XnatToBids.bids_yaml(XNAT, "'$PROJECT'","'$SCAN_ID'","'$SUBJ'", "'$INDIR'","'$SCAN_FILE'", "'$col3'", "'$SESSION'", "'$col1'", "001", "001"); XnatToBids.dataset_description_file("'$BIDS_DIR'",XNAT,"'$PROJECT'")'
+      python -c 'import os; from dax import XnatToBids, XnatUtils; XNAT = XnatUtils.get_interface(); XnatToBids.bids_yaml(XNAT, "'$PROJECT'","'$SCAN_ID'","'$SUBJ'", "'$INDIR'","'$SCAN_FILE'", "'$col3'", "'$SESSION'", "'$col1'", "001", "001");'
     # Use existing FS6_v1 in fmriprep output
     # col2 will be DIR when it contains FS6_v1 assessor output
     elif [ $col2 == "DIR" ]; then
@@ -145,8 +144,9 @@ RESDIR=${DSTDIR%/*}
 TEXTFILE=$RESDIR/DISKQ/OUTLOG/$(cut -d'/' -f5 <<<"$DSTDIR").txt
 PDFFILE=$DSTDIR/PDF/$(cut -d'/' -f5 <<<"$DSTDIR").pdf
 python -c 'from fpdf import FPDF; pdf = FPDF(); pdf.add_page(); pdf.set_font("Courier", size = 9);
-f = open("'$TEXTFILE'", "r");
-for x in f:
+f = open("'$TEXTFILE'", "r",encoding="latin-1");
+for line in f:
+	x = line.encode("latin1","ignore").decode("latin1")
 	pdf.multi_cell(193, 5, txt = x);
 pdf.output("'$PDFFILE'")'
 
@@ -176,12 +176,16 @@ for OUT in "${OUTLIST[@]}"; do
 done
 
 # Check if the PDF file has been created and is non empty
-[ -f $PDFFILE ] && haspdf=1 || echo "PDF does not exist"
-[ -s $PDFFILE ] && echo "PDF not empty" || echo "PDF is empty" && errors=1
+if [ -f $PDFFILE ]; then
+    haspdf=1 && echo "PDF exist"
+    else echo "PDF does not exist"; fi
+if [ -s $PDFFILE ]; then
+    echo "PDF not empty"
+    else echo "PDF is empty" && errors=1; fi
 
 if [ $errors -gt 0 ] || [ $haspdf != 1 ]; then echo "JOB_FAILED" && touch $DSTDIR/JOB_FAILED.txt;
 else echo "COMPLETE" && touch $DSTDIR/READY_TO_UPLOAD.txt; fi
 
-rm -rf $INDIR $OUTDIR
+rm -rf $INDIR $OUTDIR $JOBDIR/WORK
 
 echo "DONE!"
