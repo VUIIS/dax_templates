@@ -147,7 +147,7 @@ python -c 'from fpdf import FPDF; pdf = FPDF(); pdf.add_page(); pdf.set_font("Co
 f = open("'$TEXTFILE'", "r",encoding="latin-1");
 for line in f:
 	x = line.encode("latin1","ignore").decode("latin1")
-	pdf.multi_cell(193, 5, txt = x);
+	pdf.multi_cell(193, 5, txt = x, ln = 1);
 pdf.output("'$PDFFILE'")'
 
 # Handle outputs
