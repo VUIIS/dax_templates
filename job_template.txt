@@ -66,14 +66,14 @@ echo "DONE!"
 for IN in "${INLIST[@]}"; do
     IFS=',' read -r col1 col2 col3 <<< "$IN"
     if [ $col2 == "FILE" ]; then
-        CMD="curl -D - -s -b "JSESSIONID=$SESSID" $col3 -o $INDIR/$col1"
+        CMD="curl -D - -s -b "JSESSIONID=$SESSID" \"$col3\" -o $INDIR/$col1"
         CMD+=" | head -n 1 | awk '{print \$2}'"
     elif [ $col2 == "DIRJ" ]; then
-        CMD="curl -D - -s -b "JSESSIONID=$SESSID" $col3?format=zip -o $INDIR/${col1}.zip"
+        CMD="curl -D - -s -b "JSESSIONID=$SESSID" \"$col3\"?format=zip -o $INDIR/${col1}.zip"
         CMD+=" | head -n 1 | awk '{print \$2}'"
         CMD+=" && unzip -q -j $INDIR/${col1}.zip -d $INDIR/$col1"
     else
-        CMD="curl -D - -s -b "JSESSIONID=$SESSID" '$col3?format=zip&structure=simplified' -o $INDIR/${col1}.zip"
+        CMD="curl -D - -s -b "JSESSIONID=$SESSID" '\"$col3\"?format=zip&structure=simplified' -o $INDIR/${col1}.zip"
         CMD+=" | head -n 1 | awk '{print \$2}'" 
         CMD+=" && unzip -q $INDIR/${col1}.zip -d $INDIR/$col1 && mv $INDIR/$col1/*/out/* $INDIR/$col1"
     fi
