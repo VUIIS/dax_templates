@@ -7,7 +7,7 @@
 #SBATCH --time=${job_walltime}
 #SBATCH --mem=${job_memory}mb
 #SBATCH -o ${job_output_file}
-#SBATCH --constraint=westmere,sandybridge,haswell,skylake
+#SBATCH --constraint=westmere|sandybridge|haswell|skylake
 
 echo "Starting smemwatch"
 smemwatch -k 95 -d 50 $$$$ &
