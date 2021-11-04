@@ -124,7 +124,7 @@ for IN in "${INLIST[@]}"; do
       mkdir -p $OUTDIR/freesurfer/sub-01
       echo $INDIR/$col1
       echo "movin fs folders"
-      mv $INDIR/$col1/DATA/* $OUTDIR/freesurfer/sub-01/
+      mv $INDIR/$col1/SUBJECT/* $OUTDIR/freesurfer/sub-01/
       ls $OUTDIR/freesurfer/sub-01/
     fi
 done
