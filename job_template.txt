@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=${job_ppn}
 #SBATCH --time=${job_walltime}
-#SBATCH --mem=${job_memory}mb
+#SBATCH --mem=${job_memory}
 #SBATCH -o ${job_output_file}
 
 echo "Starting smemwatch"
