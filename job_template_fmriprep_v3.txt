@@ -165,14 +165,6 @@ for OUT in "${OUTLIST[@]}"; do
     else errors=1 && echo "ERROR:invalid type:$col2"; fi
 done
 
-# Check if the PDF file has been created and is non empty
-if [ -f $PDFFILE ]; then
-    haspdf=1 && echo "PDF exist"
-    else echo "PDF does not exist"; fi
-if [ -s $PDFFILE ]; then
-    echo "PDF not empty"
-    else echo "PDF is empty" && errors=1; fi
-
 if [ $errors -gt 0 ]; then echo "JOB_FAILED" && touch $DSTDIR/JOB_FAILED.txt;
 else echo "COMPLETE" && touch $DSTDIR/READY_TO_UPLOAD.txt; fi
 
