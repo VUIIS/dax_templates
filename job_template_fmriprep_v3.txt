@@ -76,12 +76,12 @@ for IN in "${INLIST[@]}"; do
         CMD+=" && unzip -q -j $INDIR/${col1}.zip -d $INDIR/$col1"
     else
         CMD="curl -D - -s -b JSESSIONID=$SESSID \"${col3}?format=zip&structure=simplified\" -o $INDIR/${col1}.zip"
-        CMD+=" | head -n 1 | awk '{print \$2}'" 
+        CMD+=" | head -n 1 | awk '{print \$2}'"
         CMD+=" && unzip -q $INDIR/${col1}.zip -d $INDIR/$col1 && mv $INDIR/$col1/*/out/* $INDIR/$col1"
     fi
 
     # Show the whole command
-	SAFE_CMD=$(echo ${CMD} | sed "s/$SESSID/SESSID/g")
+        SAFE_CMD=$(echo ${CMD} | sed "s/$SESSID/SESSID/g")
     echo $SAFE_CMD
 
     # Run the full command
@@ -146,7 +146,7 @@ haspdf=0
 for OUT in "${OUTLIST[@]}"; do
     IFS=',' read -r col1 col2 col3 col4 <<< "$OUT"
     pathlist=(${OUTDIR}/${col1})
-    
+
     # Check for missing output
     if [[ ${#pathlist[@]} == 1 && ! -e $pathlist ]]; then
         if [[ $col4 != "F" ]]; then errors=1 && echo "ERROR:missing required output:$col1"
