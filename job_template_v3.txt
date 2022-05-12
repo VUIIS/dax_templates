@@ -28,8 +28,8 @@ date
 #XNATUSER=
 ${job_cmds}
 #=============================================================================
-SESSLIMIT=25
-SLEEPMAX=300
+SESSLIMIT=100
+SLEEPMAX=900
 
 echo $DSTDIR
 echo $INDIR
