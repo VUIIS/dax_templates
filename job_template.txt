@@ -28,8 +28,8 @@ date
 #XNATUSER=
 ${job_cmds}
 #=============================================================================
-SESSLIMIT=10
-SLEEPMAX=900
+SESSLIMIT=25
+SLEEPMAX=300
 
 echo $DSTDIR
 echo $INDIR
@@ -46,17 +46,20 @@ mkdir -p $OUTDIR
 # Check number of open sessions on host before we download
 echo "Checking that we can download"
 while true;do
-    SESSCOUNT=`curl -s -n "$XNATHOST/data/user/$XNATUSER/sessions" | cut -s -f2 -d ":" | cut -f1 -d "}"`
+    SESSID=`curl -s -n "$XNATHOST/data/JSESSION"`
+    #echo "JSESSIONID=$SESSID"
+    SESSCOUNT=`curl -s -b "JSESSIONID=$SESSID" "$XNATHOST/data/user/$XNATUSER/sessions" | cut -s -f2 -d ":" | cut -f1 -d "}"`
     echo "$SESSCOUNT"
     if (( "$SESSCOUNT" > "$SESSLIMIT" )); then
         echo -n "Cannot download yet, too many open sessions, sleeping "
+        curl -s -b "JSESSIONID=$SESSID" -X DELETE "$XNATHOST/data/JSESSION"
         SLEEPSECS=$[ ( $RANDOM % $SLEEPMAX ) ]s && echo "$SLEEPSECS" && sleep $SLEEPSECS
     else
-        echo "Looks good, ready to download"
-        SESSID=`curl -s -n "$XNATHOST/data/JSESSION"`
+        echo "Looks good, ready to download" 
         break
     fi
 done
+#echo "DONE! JSESSIONID=$SESSID"
 echo "DONE!"
 
 # Collect inputs
