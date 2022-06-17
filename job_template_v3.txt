@@ -50,7 +50,11 @@ while true;do
     #echo "JSESSIONID=$SESSID"
     SESSCOUNT=`curl -s -b "JSESSIONID=$SESSID" "$XNATHOST/data/user/$XNATUSER/sessions" | cut -s -f2 -d ":" | cut -f1 -d "}"`
     echo "$SESSCOUNT"
-    if (( "$SESSCOUNT" > "$SESSLIMIT" )); then
+    if [ -z "$SESSCOUNT" ]; then
+        echo -n "Could not get session count, sleeping "
+        curl -s -b "JSESSIONID=$SESSID" -X DELETE "$XNATHOST/data/JSESSION"
+        SLEEPSECS=$[ ( $RANDOM % $SLEEPMAX ) ]s && echo "$SLEEPSECS" && sleep $SLEEPSECS
+    elif (( "$SESSCOUNT" > "$SESSLIMIT" )); then
         echo -n "Cannot download yet, too many open sessions, sleeping "
         curl -s -b "JSESSIONID=$SESSID" -X DELETE "$XNATHOST/data/JSESSION"
         SLEEPSECS=$[ ( $RANDOM % $SLEEPMAX ) ]s && echo "$SLEEPSECS" && sleep $SLEEPSECS
@@ -143,4 +147,3 @@ else echo "COMPLETE" && touch $DSTDIR/READY_TO_UPLOAD.txt; fi
 rm -rf $INDIR $OUTDIR
 
 echo "DONE!"
-
