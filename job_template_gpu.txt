@@ -6,8 +6,8 @@
 #SBATCH --time=${job_walltime}
 #SBATCH --mem=${job_memory}mb
 #SBATCH --account=vuiis_masi_gpu_acc
-#SBATCH --partition=pascal
-#SBATCH --gres=gpu:1
+#SBATCH --partition=batch_gpu
+#SBATCH --gres=gpu::nvidia_rtx_a6000:1
 #SBATCH -o ${job_output_file}
 
 smemwatch -k 90 -d 50 $$ &
@@ -68,7 +68,7 @@ haspdf=0
 for OUT in "${OUTLIST[@]}"; do
     IFS=',' read -r col1 col2 col3 col4 <<< "$OUT"
     pathlist=(${OUTDIR}/${col1})
-    
+
     # Check for missing output
     if [[ ${#pathlist[@]} == 1 && ! -e $pathlist ]]; then
         if [[ $col4 != "F" ]]; then errors=1 && echo "ERROR:missing required output:$col1"
