@@ -7,7 +7,7 @@
 #SBATCH --mem=${job_memory}mb
 #SBATCH --account=vuiis_masi_gpu_acc
 #SBATCH --partition=batch_gpu
-#SBATCH --gres=gpu::nvidia_rtx_a6000:1
+#SBATCH --gres=gpu:nvidia_rtx_a6000:1
 #SBATCH -o ${job_output_file}
 
 smemwatch -k 90 -d 50 $$ &
