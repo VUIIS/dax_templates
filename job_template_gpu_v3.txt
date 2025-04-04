@@ -8,7 +8,7 @@
 #SBATCH -o ${job_output_file}
 #SBATCH --account=vuiis_masi_gpu_acc
 #SBATCH --partition=batch_gpu
-#SBATCH --gres=gpu:nvidia_rtx_a6000:1
+#SBATCH --gres=gpu:nvidia_titan_x:1
 
 echo "Starting smemwatch"
 smemwatch -k 95 -d 50 $$$$ &
