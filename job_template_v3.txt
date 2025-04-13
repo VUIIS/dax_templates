@@ -43,6 +43,12 @@ echo $SLEEPMAX
 mkdir -p $INDIR
 mkdir -p $OUTDIR
 
+# Random initial wait that always happens, to avoid a lot of jobs started
+# simultaneously by the cluster hitting xnat with requests all at once
+SLEEPSECS=$[ ( $RANDOM % $SLEEPMAX ) ]s
+echo "Initial delay of $SLEEPSECS"
+sleep $SLEEPSECS
+
 # Check number of open sessions on host before we download
 echo "Checking that we can download"
 while true;do
