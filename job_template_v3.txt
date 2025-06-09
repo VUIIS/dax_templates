@@ -31,6 +31,15 @@ ${job_cmds}
 SESSLIMIT=25
 SLEEPMAX=300
 
+# Copy container to node, trying to avoid file access issues
+source setup_accre_runtime_dir
+CONTAINERPATH_OLD=${CONTAINERPATH}
+cp ${CONTAINERPATH} ${ACCRE_RUNTIME_DIR}
+CONTAINERPATH=${ACCRE_RUNTIME_DIR}/$(basename ${CONTAINERPATH})
+
+# Update main command with local container path
+MAINCMD=$(echo ${MAINCMD} | sed "s,${CONTAINERPATH_OLD},${CONTAINERPATH},")
+
 echo $DSTDIR
 echo $INDIR
 echo $OUTDIR
@@ -150,6 +159,6 @@ done
 if [ $errors -gt 0 ]; then echo "JOB_FAILED" && touch $DSTDIR/JOB_FAILED.txt;
 else echo "COMPLETE" && touch $DSTDIR/READY_TO_UPLOAD.txt; fi
 
-rm -rf $INDIR $OUTDIR
+rm -rf $INDIR $OUTDIR $CONTAINERPATH
 
 echo "DONE!"
