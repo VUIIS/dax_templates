@@ -152,7 +152,7 @@ for OUT in "${OUTLIST[@]}"; do
         elif [[ ${#pathlist[@]} != 1 ]]; then errors=1 && echo "ERROR:multiple PDFs";
         else haspdf=1 && cp $OUTDIR/$col1 $DSTDIR/$col3 || errors=1; fi
     elif [ $col2 == "FILE" ]; then cp $OUTDIR/$col1 $DSTDIR/$col3 || errors=1;
-    elif [ $col2 == "DIR" ]; then cp -r $OUTDIR/$col1/* $DSTDIR/$col3 || errors=1;
+    elif [ $col2 == "DIR" ]; then cp -r $OUTDIR/$col1/. $DSTDIR/$col3 || errors=1;
     else errors=1 && echo "ERROR:invalid type:$col2"; fi
 done
 
