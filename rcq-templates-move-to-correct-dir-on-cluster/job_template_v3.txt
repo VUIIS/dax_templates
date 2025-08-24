@@ -1,14 +1,12 @@
 #!/bin/bash
 #SBATCH --mail-user=${job_email}
 #SBATCH --mail-type=${job_email_options}
+#SBATCH --account=${job_rungroup}
 #SBATCH --nodes=1
 #SBATCH --ntasks=${job_ppn}
 #SBATCH --time=${job_walltime}
 #SBATCH --mem=${job_memory}
 #SBATCH -o ${job_output_file}
-#SBATCH --account=vuiis_masi_gpu_acc
-#SBATCH --partition=batch_gpu
-#SBATCH --gres=gpu:nvidia_titan_x:1
 
 #echo "Starting smemwatch"
 #smemwatch -k 95 -d 50 $$$$ &
@@ -45,6 +43,12 @@ echo $SLEEPMAX
 mkdir -p $INDIR
 mkdir -p $OUTDIR
 
+# Random initial wait that always happens, to avoid a lot of jobs started
+# simultaneously by the cluster hitting xnat with requests all at once
+SLEEPSECS=$[ ( $RANDOM % $SLEEPMAX ) ]s
+echo "Initial delay of $SLEEPSECS"
+sleep $SLEEPSECS
+
 # Check number of open sessions on host before we download
 echo "Checking that we can download"
 while true;do
@@ -70,18 +74,27 @@ echo "DONE!"
 
 # Collect inputs
 for IN in "${INLIST[@]}"; do
-    IFS=',' read -r col1 col2 col3 <<< "$IN"
+    IFS=',' read -r col1 col2 col3 col4 <<< "$IN"
+
+    if [ $col4 ]; then
+        # Create the subdir
+        DDIR="$INDIR/$col4"
+        mkdir -p $DDIR        
+    else
+        DDIR="$INDIR"
+    fi
+
     if [ $col2 == "FILE" ]; then
-        CMD="curl -D - -s -b JSESSIONID=$SESSID \"$col3\" -o $INDIR/$col1"
+        CMD="curl -D - -s -b JSESSIONID=$SESSID \"$col3\" -o $DDIR/$col1"
         CMD+=" | head -n 1 | awk '{print \$2}'"
     elif [ $col2 == "DIRJ" ]; then
-        CMD="curl -D - -s -b JSESSIONID=$SESSID \"$col3\"?format=zip -o $INDIR/${col1}.zip"
+        CMD="curl -D - -s -b JSESSIONID=$SESSID \"$col3\"?format=zip -o $DDIR/${col1}.zip"
         CMD+=" | head -n 1 | awk '{print \$2}'"
-        CMD+=" && unzip -q -j $INDIR/${col1}.zip -d $INDIR/$col1"
+        CMD+=" && unzip -q -j $DDIR/${col1}.zip -d $DDIR/$col1"
     else
-        CMD="curl -D - -s -b JSESSIONID=$SESSID \"${col3}?format=zip&structure=simplified\" -o $INDIR/${col1}.zip"
+        CMD="curl -D - -s -b JSESSIONID=$SESSID \"${col3}?format=zip&structure=simplified\" -o $DDIR/${col1}.zip"
         CMD+=" | head -n 1 | awk '{print \$2}'" 
-        CMD+=" && unzip -q $INDIR/${col1}.zip -d $INDIR/$col1 && mv $INDIR/$col1/*/out/* $INDIR/$col1"
+        CMD+=" && unzip -q $DDIR/${col1}.zip -d $DDIR/$col1 && mv $DDIR/$col1/*/out/* $DDIR/$col1"
     fi
 
     # Show the whole command
@@ -139,7 +152,7 @@ for OUT in "${OUTLIST[@]}"; do
         elif [[ ${#pathlist[@]} != 1 ]]; then errors=1 && echo "ERROR:multiple PDFs";
         else haspdf=1 && cp $OUTDIR/$col1 $DSTDIR/$col3 || errors=1; fi
     elif [ $col2 == "FILE" ]; then cp $OUTDIR/$col1 $DSTDIR/$col3 || errors=1;
-    elif [ $col2 == "DIR" ]; then cp -r $OUTDIR/$col1/* $DSTDIR/$col3 || errors=1;
+    elif [ $col2 == "DIR" ]; then cp -r $OUTDIR/$col1/. $DSTDIR/$col3 || errors=1;
     else errors=1 && echo "ERROR:invalid type:$col2"; fi
 done
 
@@ -149,3 +162,4 @@ else echo "COMPLETE" && touch $DSTDIR/READY_TO_UPLOAD.txt; fi
 rm -rf $INDIR $OUTDIR
 
 echo "DONE!"
+

@@ -1,17 +1,15 @@
 #!/bin/bash
-#SBATCH --mail-user=${job_email}
+#BATCH --mail-user=${job_email}
 #SBATCH --mail-type=${job_email_options}
+#SBATCH --account=${job_rungroup}
 #SBATCH --nodes=1
 #SBATCH --ntasks=${job_ppn}
 #SBATCH --time=${job_walltime}
 #SBATCH --mem=${job_memory}
 #SBATCH -o ${job_output_file}
-#SBATCH --account=vuiis_masi_gpu_acc
-#SBATCH --partition=batch_gpu
-#SBATCH --gres=gpu:nvidia_titan_x:1
 
-echo "Starting smemwatch"
-smemwatch -k 95 -d 50 $$$$ &
+#echo "Starting smemwatch"
+#smemwatch -k 95 -d 50 $$$$ &
 
 uname -a # outputs node info (name, date&time, type, OS, etc)
 date
@@ -33,6 +31,15 @@ ${job_cmds}
 SESSLIMIT=25
 SLEEPMAX=300
 
+# Copy container to node, trying to avoid file access issues
+source setup_accre_runtime_dir
+CONTAINERPATH_OLD=${CONTAINERPATH}
+cp ${CONTAINERPATH} ${ACCRE_RUNTIME_DIR}
+CONTAINERPATH=${ACCRE_RUNTIME_DIR}/$(basename ${CONTAINERPATH})
+
+# Update main command with local container path
+MAINCMD=$(echo ${MAINCMD} | sed "s,${CONTAINERPATH_OLD},${CONTAINERPATH},")
+
 echo $DSTDIR
 echo $INDIR
 echo $OUTDIR
@@ -44,6 +51,12 @@ echo $SLEEPMAX
 
 mkdir -p $INDIR
 mkdir -p $OUTDIR
+
+# Random initial wait that always happens, to avoid a lot of jobs started
+# simultaneously by the cluster hitting xnat with requests all at once
+SLEEPSECS=$[ ( $RANDOM % $SLEEPMAX ) ]s
+echo "Initial delay of $SLEEPSECS"
+sleep $SLEEPSECS
 
 # Check number of open sessions on host before we download
 echo "Checking that we can download"
@@ -85,7 +98,7 @@ for IN in "${INLIST[@]}"; do
     fi
 
     # Show the whole command
-	SAFE_CMD=$(echo ${CMD} | sed "s/$SESSID/SESSID/g")
+    SAFE_CMD=$(echo ${CMD} | sed "s/$SESSID/SESSID/g")
     echo $SAFE_CMD
 
     # Run the full command
@@ -146,6 +159,6 @@ done
 if [ $errors -gt 0 ]; then echo "JOB_FAILED" && touch $DSTDIR/JOB_FAILED.txt;
 else echo "COMPLETE" && touch $DSTDIR/READY_TO_UPLOAD.txt; fi
 
-rm -rf $INDIR $OUTDIR
+rm -rf $INDIR $OUTDIR $CONTAINERPATH
 
 echo "DONE!"

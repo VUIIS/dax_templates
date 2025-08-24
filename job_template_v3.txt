@@ -8,8 +8,8 @@
 #SBATCH --mem=${job_memory}
 #SBATCH -o ${job_output_file}
 
-echo "Starting smemwatch"
-smemwatch -k 95 -d 50 $$$$ &
+#echo "Starting smemwatch"
+#smemwatch -k 95 -d 50 $$$$ &
 
 uname -a # outputs node info (name, date&time, type, OS, etc)
 date

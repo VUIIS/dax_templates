@@ -1,0 +1,265 @@
+#!/bin/bash
+
+#SBATCH --account=${job_rungroup}
+#SBATCH --nodes=1
+#SBATCH --ntasks=${job_ppn}
+#SBATCH --time=${job_walltime}
+#SBATCH --mem=${job_memory}
+#SBATCH -o ${job_output_file}
+
+uname -a # outputs node info (name, date&time, type, OS, etc)
+date # timestamp
+
+#=============================================================================
+#VERSION=
+#JOBDIR=
+#INDIR=
+#OUTDIR=
+#DSTDIR=
+#INLIST=
+#OUTLIST=
+#CONTAINERPATH=
+#MAINCMD=
+#XNATHOST=
+#XNATUSER=
+${job_cmds}
+#=============================================================================
+SESSLIMIT=25  # number of open XNAT sessions that should force us to sleep
+SLEEPMAX=300  # upper range of sleep time to randomly select from
+SLEEPLIMIT=10 # number of times to sleep before we give up
+ASSESSOR=$(basename ${DSTDIR})  # Output Assessor Label
+PROJECT=${ASSESSOR%%-x-*}  # Project of Assessor
+
+# Copy container to node, trying to avoid file access issues
+source setup_accre_runtime_dir
+CONTAINERPATH_OLD=${CONTAINERPATH}
+cp ${CONTAINERPATH} ${ACCRE_RUNTIME_DIR}
+CONTAINERPATH=${ACCRE_RUNTIME_DIR}/$(basename ${CONTAINERPATH})
+
+# Update main command with local container path
+MAINCMD=$(echo ${MAINCMD} | sed "s,${CONTAINERPATH_OLD},${CONTAINERPATH},")
+
+# Copy container to for pre commmand
+#PRECONTAINERPATH_OLD=${PRECONTAINERPATH}
+#cp ${PRECONTAINERPATH} ${ACCRE_RUNTIME_DIR}
+#PRECONTAINERPATH=${ACCRE_RUNTIME_DIR}/$(basename ${PRECONTAINERPATH})
+
+# Update main command with local pre container path
+#MAINCMD=$(echo ${MAINCMD} | sed "s,${PRECONTAINERPATH_OLD},${PRECONTAINERPATH},")
+
+# Copy container for post command
+#POSTCONTAINERPATH_OLD=${POSTCONTAINERPATH}
+#cp ${POSTCONTAINERPATH} ${ACCRE_RUNTIME_DIR}
+#POSTCONTAINERPATH=${ACCRE_RUNTIME_DIR}/$(basename ${POSTCONTAINERPATH})
+
+# Update main command with local post container path
+#MAINCMD=$(echo ${MAINCMD} | sed "s,${POSTCONTAINERPATH_OLD},${POSTCONTAINERPATH},")
+
+echo $DSTDIR
+echo $ASSESSOR
+echo $PROJECT
+echo $INDIR
+echo $OUTDIR
+echo $CONTAINERPATH
+echo $XNATHOST
+echo $XNATUSER
+echo "SESSLIMIT=$SESSLIMIT"
+echo "SLEEPMAX=$SLEEPMAX"
+echo "SLEEPLIMIT=$SLEEPLIMIT"
+
+mkdir -p $INDIR
+mkdir -p $OUTDIR
+
+# Random initial wait that always happens, to avoid a lot of jobs started
+# simultaneously by the cluster hitting xnat with requests all at once
+SLEEPSECS=$[ ( $RANDOM % $SLEEPMAX ) ]s
+echo "Initial delay of $SLEEPSECS"
+sleep $SLEEPSECS
+
+# Check number of open sessions on host before we download
+echo "Checking that we can download"
+count=0
+while true; do
+    SESSID=`curl -s -n "$XNATHOST/data/JSESSION"`
+    SESSCOUNT=`curl -s -b "JSESSIONID=$SESSID" "$XNATHOST/data/user/$XNATUSER/sessions" | cut -s -f2 -d ":" | cut -f1 -d "}"`
+    echo "$SESSCOUNT"
+    if [ -z "$SESSCOUNT" ]; then
+        echo -n "Could not get session count, sleeping "
+        curl -s -b "JSESSIONID=$SESSID" -X DELETE "$XNATHOST/data/JSESSION"
+        SLEEPSECS=$[ ( $RANDOM % $SLEEPMAX * 2 ** $count) ]s && echo "$SLEEPSECS" && sleep $SLEEPSECS
+    elif (( "$SESSCOUNT" > "$SESSLIMIT" )); then
+        echo -n "Cannot download yet, too many open sessions, sleeping "
+        curl -s -b "JSESSIONID=$SESSID" -X DELETE "$XNATHOST/data/JSESSION"
+        SLEEPSECS=$[ ( $RANDOM % $SLEEPMAX * 2 ** $count ) ]s && echo "$SLEEPSECS" && sleep $SLEEPSECS
+    else
+        echo "Looks good, ready to download" 
+        break
+    fi
+
+    (count++)
+    if [[ "$count" -eq "$SLEEPLIMIT" ]]; then
+        echo "Maximum download retries reached, exiting..."
+        exit 1
+    fi
+done
+echo "DONE!"
+
+# Collect inputs
+for IN in "${INLIST[@]}"; do
+    IFS=',' read -r col1 col2 col3 <<< "$IN"
+    if [ $col2 == "FILE" ]; then
+        CMD="curl -D - -s -b JSESSIONID=$SESSID \"$col3\" -o $INDIR/$col1"
+        CMD+=" | head -n 1 | awk '{print \$2}'"
+    elif [ $col2 == "DIRJ" ]; then
+        CMD="curl -D - -s -b JSESSIONID=$SESSID \"$col3\"?format=zip -o $INDIR/${col1}.zip"
+        CMD+=" | head -n 1 | awk '{print \$2}'"
+        CMD+=" && unzip -q -j $INDIR/${col1}.zip -d $INDIR/$col1"
+    else
+        CMD="curl -D - -s -b JSESSIONID=$SESSID \"${col3}?format=zip&structure=simplified\" -o $INDIR/${col1}.zip"
+        CMD+=" | head -n 1 | awk '{print \$2}'" 
+        CMD+=" && unzip -q $INDIR/${col1}.zip -d $INDIR/$col1 && mv $INDIR/$col1/*/out/* $INDIR/$col1"
+    fi
+
+    # Show the whole command
+    SAFE_CMD=$(echo ${CMD} | sed "s/$SESSID/SESSID/g")
+    echo $SAFE_CMD
+
+    # Run the full command
+    eval result=\$\($CMD\)
+    echo "result=$result"
+
+    # Check for success
+    if test "$result" != '200' ; then
+        echo "Download failed with code:$result, exiting..."
+        curl -s -b "JSESSIONID=$SESSID" -X DELETE "$XNATHOST/data/JSESSION"
+        exit 1
+    fi
+done
+
+# Disconnect XNAT
+curl -s -b "JSESSIONID=$SESSID" -X DELETE "$XNATHOST/data/JSESSION"
+
+# Run main command
+echo $_JAVA_OPTIONS
+echo $MAINCMD
+eval $MAINCMD
+
+# Write version files
+mkdir -p $DSTDIR
+echo $VERSION > $DSTDIR/version.txt
+sha256sum $CONTAINERPATH | awk '{print $1}' > $DSTDIR/dax_docker_version.txt
+
+# Convert ps to pdf
+if [ -e $OUTDIR/report.ps ]; then
+    gs -sDEVICE=pdfwrite -o $OUTDIR/report.pdf $OUTDIR/report.ps
+fi
+
+# Ready to upload, get an XNAT session, checking number of open sessions
+echo "Checking that we can upload"
+count=0
+while true; do
+    SESSID=`curl -s -n "$XNATHOST/data/JSESSION"`
+    SESSCOUNT=`curl -s -b "JSESSIONID=$SESSID" "$XNATHOST/data/user/$XNATUSER/sessions" | cut -s -f2 -d ":" | cut -f1 -d "}"`
+    echo "$SESSCOUNT"
+    if [ -z "$SESSCOUNT" ]; then
+        echo -n "Could not get session count, sleeping "
+        curl -s -b "JSESSIONID=$SESSID" -X DELETE "$XNATHOST/data/JSESSION"
+        SLEEPSECS=$[ ( $RANDOM % $SLEEPMAX * 2 ** $count) ]s && echo "$SLEEPSECS" && sleep $SLEEPSECS
+    elif (( "$SESSCOUNT" > "$SESSLIMIT" )); then
+        echo -n "Cannot upload yet, too many open sessions, sleeping "
+        curl -s -b "JSESSIONID=$SESSID" -X DELETE "$XNATHOST/data/JSESSION"
+        SLEEPSECS=$[ ( $RANDOM % $SLEEPMAX * 2 ** $count) ]s && echo "$SLEEPSECS" && sleep $SLEEPSECS
+    else
+        echo "Looks good, ready to upload" 
+        break
+    fi
+
+    (count++)
+    if [[ "$count" -eq "$SLEEPLIMIT" ]]; then
+        echo "Maximum upload retries reached, exiting..."
+        exit 1
+    fi
+done
+
+# Use session id to upload outputs
+errors=0
+for OUT in "${OUTLIST[@]}"; do
+    IFS=',' read -r col1 col2 col3 col4 <<< "$OUT"
+    pathlist=(${OUTDIR}/${col1})
+
+    # Check for missing output
+    if [[ ${#pathlist[@]} == 1 && ! -e $pathlist ]]; then
+        if [[ $col4 != "F" ]]; then errors=1 && echo "ERROR:missing required output:$col1"
+        else echo "WARN:output not required"; fi
+        continue
+    fi
+
+    # Upload based on type
+    if [ $col3 == "PDF" ]; then
+        if [ $col2 != "FILE" ]; then errors=1 && echo "ERROR:illegal type for PDF";
+        elif [[ ${#pathlist[@]} != 1 ]]; then errors=1 && echo "ERROR:multiple PDFs";
+        else
+            CMD="curl --fail -D - -s -b JSESSIONID=$SESSID -X PUT \"$XNATHOST/data/projects/$PROJECT/experiments/$ASSESSOR/resources/$col3/files/$col1\" -F file=\"@$OUTDIR/$col1\""
+        fi
+    elif [ $col2 == "FILE" ]; then
+        CMD="curl --fail -D - -s -b JSESSIONID=$SESSID -X PUT \"$XNATHOST/data/projects/$PROJECT/experiments/$ASSESSOR/resources/$col3/files/$col1\" -F file=\"@$OUTDIR/$col1\""
+    elif [ $col2 == "DIR" ]; then
+        # Zip and upload zip with extract
+        cd ${OUTDIR}/${col1}
+        zip -q -r ${OUTDIR}/${col3}.zip .
+        CMD="curl --fail -D - -s -b JSESSIONID=$SESSID -X PUT \"$XNATHOST/data/projects/$PROJECT/experiments/$ASSESSOR/resources/$col3/files/${col3}.zip?extract=true&overwrite=true\" -F file=\"@${OUTDIR}/${col3}.zip\"" 
+    else
+        errors=1
+        echo "ERROR:invalid type:$col2"
+        continue
+    fi
+
+    CMD+=" | head -n 1 | awk '{print \$2}'"
+
+    SAFE_CMD=$(echo ${CMD} | sed "s/$SESSID/SESSID/g")
+    echo $SAFE_CMD
+
+    eval result=\$\($CMD\)
+    echo "result=$result"
+
+    # Check for success
+    if [[ "$result" -ne 100 && "$result" -ne 200 ]]; then
+        echo "Upload failed with code:$result"
+        errors=1
+    fi
+done
+
+# Determine final result
+if [ $errors -gt 0 ]; then echo "JOB_FAILED" && touch $DSTDIR/JOB_FAILED.txt;
+else echo "COMPLETE" && touch $DSTDIR/READY_TO_UPLOAD.txt; fi
+
+#if [ $errors -gt 0 ]; then echo "JOB_FAILED" && STATUS="JOB_FAILED" && touch $DSTDIR/JOB_FAILED.txt;
+#else echo "COMPLETE" && STATUS="COMPLETE" && touch $DSTDIR/READY_TO_UPLOAD.txt; fi
+
+# Set status on XNAT
+#CMD="curl --fail -D - -s -b JSESSIONID=$SESSID -X PUT \"$XNATHOST/data/projects/$PROJECT/experiments/$ASSESSOR?proc:genprocdata/procstatus=$STATUS\""
+#CMD+=" | head -n 1 | awk '{print \$2}'"
+#SAFE_CMD=$(echo ${CMD} | sed "s/$SESSID/SESSID/g")
+#echo $SAFE_CMD
+#eval result=\$\($CMD\)
+#if test "$result" != '200' ; then
+#    echo "Set status failed with code:$result"
+#fi
+
+#CMD="curl --fail -D - -s -b JSESSIONID=$SESSID -X PUT \"$XNATHOST/data/projects/$PROJECT/experiments/$ASSESSOR?proc:subjgenprocdata/procstatus=$STATUS\""
+#CMD+=" | head -n 1 | awk '{print \$2}'"
+#SAFE_CMD=$(echo ${CMD} | sed "s/$SESSID/SESSID/g")
+#echo $SAFE_CMD
+#eval result=\$\($CMD\)
+#if test "$result" != '200' ; then
+#    echo "Set status failed with code:$result"
+#fi
+
+# Disconnect XNAT
+curl -s -b "JSESSIONID=$SESSID" -X DELETE "$XNATHOST/data/JSESSION"
+
+# Delete local files
+rm -rf $JOBDIR $CONTAINERPATH
+
+echo "DONE!"
+
