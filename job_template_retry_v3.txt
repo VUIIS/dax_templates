@@ -42,23 +42,21 @@ echo Max random delay between tries: $SLEEPMAX
 
 
 # Make opening sessions robust to intermittent failure
+# Note, the sessid is passed out via an echo so we can't also generate
+# any logging messages
 function robust_session {
     for try in {1..3}; do
-        echo "Trying to get session (attempt ${try}):"
-        SESSID=`curl -s -n "$XNATHOST/data/JSESSION"`
+        SESSID=$(curl -s -n "$XNATHOST/data/JSESSION")
         if [[ -n "${SESSID}" ]]; then 
             echo "${SESSID}"
             break
         fi
     done
-    if [[ -z "${SESSID}" ]]; then
-        echo FAILED TO ESTABLISH XNAT SESSION ALL ATTEMPTS
-        exit 1
-    fi
 }
 
 
 # Make curl commands robust to intermittent failure
+# Here we do not need to pass anything back, so we can have logging messages
 function robust_curl {
     local sessid="${1}"
     local curlcmd="${2}"
@@ -78,8 +76,6 @@ function robust_curl {
     fi
 }
 
-# FIXME UPDATE ALL CURL COMMANDS TO USE THE RETRY FUNCTION
-
 
 # Random initial wait that always happens, to avoid a lot of jobs started
 # simultaneously by the cluster hitting xnat with requests all at once
@@ -92,6 +88,10 @@ sleep $SLEEPSECS
 echo "Checking for low enough open sessions on XNAT"
 while true;do
     SESSID=$(robust_session)
+    if [[ -z "${SESSID}" ]]; then
+        echo FAILED TO GET A SESSION ID IN ALL ATTEMPTS
+        exit 1
+    fi
     SESSCOUNT=`curl -s -b "JSESSIONID=$SESSID" "$XNATHOST/data/user/$XNATUSER/sessions" | cut -s -f2 -d ":" | cut -f1 -d "}"`
     echo "$SESSCOUNT"
     if [ -z "$SESSCOUNT" ]; then
