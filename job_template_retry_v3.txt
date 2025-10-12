@@ -51,6 +51,7 @@ function robust_session {
             echo "${SESSID}"
             break
         fi
+        sleep 30
     done
 }
 
@@ -69,6 +70,7 @@ function robust_curl {
         if [[ "$result" == '200' ]]; then
             break
         fi
+        sleep 30
     done
     if [[ "$result" != '200' ]]; then
         echo CURL COMMAND FAILED ALL ATTEMPTS
