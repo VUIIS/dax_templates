@@ -103,7 +103,7 @@ while true;do
         curl -s -b "JSESSIONID=$SESSID" -X DELETE "$XNATHOST/data/JSESSION"
         SLEEPSECS=$[ ( $RANDOM % $SLEEPMAX ) ]s && echo "$SLEEPSECS" && sleep $SLEEPSECS
     else
-        echo "Looks good, ready to download" 
+        echo "Session looks good, ready to download" 
         break
     fi
 done
@@ -131,11 +131,12 @@ for IN in "${INLIST[@]}"; do
         CMD+=" && unzip -q $INDIR/${col1}.zip -d $INDIR/$col1 && mv $INDIR/$col1/*/out/* $INDIR/$col1"
     fi
 
-    # FIXME Run the command robustly
+    # Run the command robustly
+    robust_curl $SESSID "$CMD"
     
 done
 
-# Disconnect XNAT
+# Disconnect XNAT session
 curl -s -b "JSESSIONID=$SESSID" -X DELETE "$XNATHOST/data/JSESSION"
 
 
