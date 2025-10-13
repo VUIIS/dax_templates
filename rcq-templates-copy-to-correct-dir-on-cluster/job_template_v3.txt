@@ -37,11 +37,47 @@ echo $OUTDIR
 echo $CONTAINERPATH
 echo $XNATHOST
 echo $XNATUSER
-echo $SESSLIMIT
-echo $SLEEPMAX
+echo Max sessions: $SESSLIMIT
+echo Max random delay between tries: $SLEEPMAX
 
-mkdir -p $INDIR
-mkdir -p $OUTDIR
+
+# Make opening sessions robust to intermittent failure
+# Note, the sessid is passed out via an echo so we can't also generate
+# any logging messages
+function robust_session {
+    for try in {1..5}; do
+        SESSID=$(curl -s -n "$XNATHOST/data/JSESSION")
+        if [[ -n "${SESSID}" ]]; then 
+            echo "${SESSID}"
+            break
+        fi
+        sleep 30
+    done
+}
+
+
+# Make curl commands robust to intermittent failure
+# Here we do not need to pass anything back, so we can have logging messages
+function robust_curl {
+    local sessid="${1}"
+    local curlcmd="${2}"
+	safecmd=$(echo ${curlcmd} | sed "s/$sessid/SESSID/g")
+    for try in {1..5}; do
+        echo "Trying command (attempt ${try}):"
+        echo $safecmd
+        eval result=\$\($curlcmd\)
+        echo "Result=$result"        
+        if [[ "$result" == '200' ]]; then
+            break
+        fi
+        sleep 30
+    done
+    if [[ "$result" != '200' ]]; then
+        echo CURL COMMAND FAILED ALL ATTEMPTS
+        exit 1
+    fi
+}
+
 
 # Random initial wait that always happens, to avoid a lot of jobs started
 # simultaneously by the cluster hitting xnat with requests all at once
@@ -49,11 +85,15 @@ SLEEPSECS=$[ ( $RANDOM % $SLEEPMAX ) ]s
 echo "Initial delay of $SLEEPSECS"
 sleep $SLEEPSECS
 
+
 # Check number of open sessions on host before we download
-echo "Checking that we can download"
+echo "Checking for low enough open sessions on XNAT"
 while true;do
-    SESSID=`curl -s -n "$XNATHOST/data/JSESSION"`
-    #echo "JSESSIONID=$SESSID"
+    SESSID=$(robust_session)
+    if [[ -z "${SESSID}" ]]; then
+        echo FAILED TO GET A SESSION ID IN ALL ATTEMPTS
+        exit 1
+    fi
     SESSCOUNT=`curl -s -b "JSESSIONID=$SESSID" "$XNATHOST/data/user/$XNATUSER/sessions" | cut -s -f2 -d ":" | cut -f1 -d "}"`
     echo "$SESSCOUNT"
     if [ -z "$SESSCOUNT" ]; then
@@ -65,56 +105,42 @@ while true;do
         curl -s -b "JSESSIONID=$SESSID" -X DELETE "$XNATHOST/data/JSESSION"
         SLEEPSECS=$[ ( $RANDOM % $SLEEPMAX ) ]s && echo "$SLEEPSECS" && sleep $SLEEPSECS
     else
-        echo "Looks good, ready to download" 
+        echo "Session looks good, ready to download" 
         break
     fi
 done
-#echo "DONE! JSESSIONID=$SESSID"
-echo "DONE!"
+echo "Working session established"
+
+
+# Set up working dir structure
+mkdir -p $INDIR
+mkdir -p $OUTDIR
+
 
 # Collect inputs
 for IN in "${INLIST[@]}"; do
-    IFS=',' read -r col1 col2 col3 col4 <<< "$IN"
-
-    if [ $col4 ]; then
-        # Create the subdir
-        DDIR="$INDIR/$col4"
-        mkdir -p $DDIR        
-    else
-        DDIR="$INDIR"
-    fi
-
+    IFS=',' read -r col1 col2 col3 <<< "$IN"
     if [ $col2 == "FILE" ]; then
-        CMD="curl -D - -s -b JSESSIONID=$SESSID \"$col3\" -o $DDIR/$col1"
+        CMD="curl -D - -s -b JSESSIONID=$SESSID \"$col3\" -o $INDIR/$col1"
         CMD+=" | head -n 1 | awk '{print \$2}'"
     elif [ $col2 == "DIRJ" ]; then
-        CMD="curl -D - -s -b JSESSIONID=$SESSID \"$col3\"?format=zip -o $DDIR/${col1}.zip"
+        CMD="curl -D - -s -b JSESSIONID=$SESSID \"$col3\"?format=zip -o $INDIR/${col1}.zip"
         CMD+=" | head -n 1 | awk '{print \$2}'"
-        CMD+=" && unzip -q -j $DDIR/${col1}.zip -d $DDIR/$col1"
+        CMD+=" && unzip -q -j $INDIR/${col1}.zip -d $INDIR/$col1"
     else
-        CMD="curl -D - -s -b JSESSIONID=$SESSID \"${col3}?format=zip&structure=simplified\" -o $DDIR/${col1}.zip"
+        CMD="curl -D - -s -b JSESSIONID=$SESSID \"${col3}?format=zip&structure=simplified\" -o $INDIR/${col1}.zip"
         CMD+=" | head -n 1 | awk '{print \$2}'" 
-        CMD+=" && unzip -q $DDIR/${col1}.zip -d $DDIR/$col1 && mv $DDIR/$col1/*/out/* $DDIR/$col1"
+        CMD+=" && unzip -q $INDIR/${col1}.zip -d $INDIR/$col1 && mv $INDIR/$col1/*/out/* $INDIR/$col1"
     fi
 
-    # Show the whole command
-	SAFE_CMD=$(echo ${CMD} | sed "s/$SESSID/SESSID/g")
-    echo $SAFE_CMD
-
-    # Run the full command
-    eval result=\$\($CMD\)
-    echo "result=$result"
-
-    # Check for success
-    if test "$result" != '200' ; then
-        echo "Download failed with code:$result, exiting..."
-        curl -s -b "JSESSIONID=$SESSID" -X DELETE "$XNATHOST/data/JSESSION"
-        exit 1
-    fi
+    # Run the command robustly
+    robust_curl $SESSID "$CMD"
+    
 done
 
-# Disconnect XNAT
+# Disconnect XNAT session
 curl -s -b "JSESSIONID=$SESSID" -X DELETE "$XNATHOST/data/JSESSION"
+
 
 # Run main command
 echo $_JAVA_OPTIONS
@@ -162,4 +188,3 @@ else echo "COMPLETE" && touch $DSTDIR/READY_TO_UPLOAD.txt; fi
 rm -rf $INDIR $OUTDIR
 
 echo "DONE!"
-
